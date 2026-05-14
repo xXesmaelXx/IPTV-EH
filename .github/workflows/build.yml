@@ -22,7 +22,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
+          flutter-version: '3.27.1'
           channel: stable
           cache: true
 
@@ -39,31 +39,10 @@ jobs:
           rm -rf /tmp/iptv_build/lib
           cp -r lib /tmp/iptv_build/lib
 
-      - name: Patch Android configuration
+      - name: Patch AndroidManifest (allow HTTP streams)
         run: |
           MANIFEST="/tmp/iptv_build/android/app/src/main/AndroidManifest.xml"
-          SETTINGS="/tmp/iptv_build/android/settings.gradle"
-          GRADLE="/tmp/iptv_build/android/app/build.gradle"
-
-          # Allow cleartext HTTP traffic for IPTV streams
           sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
-
-          # Fix Kotlin version in settings.gradle (if it exists)
-          if [ -f "$SETTINGS" ]; then
-            sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.25"/' "$SETTINGS"
-            echo "=== settings.gradle ==="
-            cat "$SETTINGS"
-          fi
-
-          # Fix Kotlin version in build.gradle (older Flutter format)
-          if [ -f "$GRADLE" ]; then
-            sed -i "s/ext.kotlin_version = '[^']*'/ext.kotlin_version = '1.9.25'/" "$GRADLE"
-            echo "=== app/build.gradle ==="
-            cat "$GRADLE"
-          fi
-
-          echo "=== AndroidManifest.xml ==="
-          cat "$MANIFEST"
 
       - name: Install dependencies
         working-directory: /tmp/iptv_build
