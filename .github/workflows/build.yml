@@ -1,0 +1,76 @@
+name: Build IPTV Player APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: stable
+          cache: true
+
+      - name: Create Flutter project scaffold
+        run: |
+          flutter create /tmp/iptv_build \
+            --org com.iptvplayer \
+            --project-name iptv_app \
+            --platforms android
+
+      - name: Inject custom source files
+        run: |
+          cp pubspec.yaml /tmp/iptv_build/pubspec.yaml
+          rm -rf /tmp/iptv_build/lib
+          cp -r lib /tmp/iptv_build/lib
+
+      - name: Patch AndroidManifest (allow HTTP streams + internet)
+        run: |
+          MANIFEST="/tmp/iptv_build/android/app/src/main/AndroidManifest.xml"
+          # Allow cleartext HTTP (most IPTV streams are HTTP, not HTTPS)
+          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
+          # Ensure INTERNET permission exists
+          grep -q 'INTERNET' "$MANIFEST" || \
+            sed -i 's|<manifest|<manifest>\n    <uses-permission android:name="android.permission.INTERNET"/>|' "$MANIFEST"
+          echo "=== AndroidManifest.xml ==="
+          cat "$MANIFEST"
+
+      - name: Patch build.gradle (multiDex for better_player)
+        run: |
+          GRADLE="/tmp/iptv_build/android/app/build.gradle"
+          # Add multiDexEnabled after minSdkVersion line
+          sed -i '/minSdkVersion/a \        multiDexEnabled true' "$GRADLE"
+          # Add multidex dependency
+          sed -i "/implementation 'org.jetbrains.kotlin/a \    implementation 'androidx.multidex:multidex:2.0.1'" "$GRADLE"
+          echo "=== build.gradle ==="
+          cat "$GRADLE"
+
+      - name: Install dependencies
+        working-directory: /tmp/iptv_build
+        run: flutter pub get
+
+      - name: Build release APK
+        working-directory: /tmp/iptv_build
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPTV-Player-APK
+          path: /tmp/iptv_build/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
