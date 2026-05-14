@@ -1,6 +1,7 @@
-import 'package:better_player/better_player.dart';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 import '../models/channel.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -13,7 +14,10 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late BetterPlayerController _controller;
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -26,40 +30,47 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _initPlayer();
   }
 
-  void _initPlayer() {
-    final dataSource = BetterPlayerDataSource(
-      BetterPlayerDataSourceType.network,
-      widget.channel.streamUrl,
-      liveStream: true,
-      notificationConfiguration: BetterPlayerNotificationConfiguration(
-        showNotification: true,
-        title: widget.channel.name,
-        author: widget.channel.group ?? 'IPTV',
-      ),
-    );
+  Future<void> _initPlayer() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
-    _controller = BetterPlayerController(
-      BetterPlayerConfiguration(
-        aspectRatio: 16 / 9,
+    try {
+      _chewieController?.dispose();
+      _videoController?.dispose();
+
+      final uri = Uri.parse(widget.channel.streamUrl);
+      _videoController = VideoPlayerController.networkUrl(uri);
+      await _videoController!.initialize();
+
+      _chewieController = ChewieController(
+        videoPlayerController: _videoController!,
         autoPlay: true,
         looping: false,
-        errorBuilder: (ctx, errorMsg) => _buildError(errorMsg),
-        controlsConfiguration: const BetterPlayerControlsConfiguration(
-          controlBarColor: Colors.black54,
-          iconsColor: Colors.white,
-          progressBarPlayedColor: Colors.blueAccent,
-          progressBarHandleColor: Colors.blueAccent,
-          loadingColor: Colors.blueAccent,
-          overflowMenuIconsColor: Colors.white,
-          enableSubtitles: false,
-          enableAudioTracks: false,
+        isLive: true,
+        allowFullScreen: true,
+        allowMuting: true,
+        showControlsOnInitialize: true,
+        materialProgressColors: ChewieProgressColors(
+          playedColor: Colors.blueAccent,
+          handleColor: Colors.blueAccent,
+          backgroundColor: Colors.white24,
+          bufferedColor: Colors.white38,
         ),
-      ),
-      betterPlayerDataSource: dataSource,
-    );
+        errorBuilder: (ctx, msg) => _buildError(msg),
+      );
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
+    }
   }
 
-  Widget _buildError(String? message) {
+  Widget _buildError(String message) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -69,24 +80,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
           const SizedBox(height: 12),
           const Text('Stream unavailable',
               style: TextStyle(color: Colors.white, fontSize: 16)),
-          if (message != null)
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              child: Text(
-                message,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(color: Colors.white38, fontSize: 12),
-              ),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(color: Colors.white38, fontSize: 12),
             ),
+          ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: () {
-              _controller.dispose();
-              _initPlayer();
-              setState(() {});
-            },
+            onPressed: _initPlayer,
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
@@ -99,7 +105,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _chewieController?.dispose();
+    _videoController?.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
@@ -129,8 +136,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (widget.channel.group != null)
               Text(
                 widget.channel.group!,
-                style:
-                    const TextStyle(color: Colors.white54, fontSize: 11),
+                style: const TextStyle(
+                    color: Colors.white54, fontSize: 11),
               ),
           ],
         ),
@@ -140,7 +147,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: BetterPlayer(controller: _controller),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: Colors.blueAccent))
+                  : _error != null
+                      ? _buildError(_error!)
+                      : Chewie(controller: _chewieController!),
             ),
             Expanded(
               child: Padding(
@@ -151,10 +164,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Text(
                       widget.channel.name,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold),
                     ),
                     if (widget.channel.group != null) ...[
                       const SizedBox(height: 6),
@@ -165,7 +177,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           color: Colors.blueAccent.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: Colors.blueAccent.withOpacity(0.5)),
+                              color:
+                                  Colors.blueAccent.withOpacity(0.5)),
                         ),
                         child: Text(
                           widget.channel.group!,
@@ -182,25 +195,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         const Icon(Icons.live_tv,
                             color: Colors.red, size: 16),
                         const SizedBox(width: 6),
-                        const Text(
-                          'LIVE',
-                          style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13),
-                        ),
+                        const Text('LIVE',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13)),
                         const Spacer(),
                         TextButton.icon(
-                          onPressed: () {
-                            _controller.dispose();
-                            _initPlayer();
-                            setState(() {});
-                          },
+                          onPressed: _initPlayer,
                           icon: const Icon(Icons.refresh,
                               color: Colors.white54, size: 16),
                           label: const Text('Reload stream',
                               style: TextStyle(
-                                  color: Colors.white54, fontSize: 12)),
+                                  color: Colors.white54,
+                                  fontSize: 12)),
                         ),
                       ],
                     ),

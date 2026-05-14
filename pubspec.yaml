@@ -10,7 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.0
-  better_player: ^0.0.84
+  video_player: ^2.9.2
+  chewie: ^1.8.5
   cached_network_image: ^3.3.1
 
 dev_dependencies:
