@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/channel.dart';
 
-const _playlistUrl = 'https://iptv-org.github.io/iptv/index.m3u';
+const _playlistUrl =
+    'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/index.m3u';
 
 List<Channel> _parseM3u(String content) {
   final channels = <Channel>[];
